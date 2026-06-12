@@ -11,7 +11,5 @@ public interface UsuarioService {
     Optional<Usuario> findByUsername(String username);
     Usuario save(Usuario usuario);
     void deleteById(Long id);
-
-    // ========== NUEVO METODO ==========
-    boolean validarDatosCompletos(Usuario usuario);  //  PARA LA PRUEBA
+    Usuario update(Long id, Usuario usuario);
 }
