@@ -4,6 +4,7 @@ import com.minimarket.entity.Usuario;
 import com.minimarket.repository.UsuarioRepository;
 import com.minimarket.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,6 +15,9 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;  // ← AGREGAR ESTO
 
     @Override
     public List<Usuario> findAll() {
@@ -32,6 +36,11 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public Usuario save(Usuario usuario) {
+        // Codificar la contraseña antes de guardar
+        if (usuario.getPassword() != null && !usuario.getPassword().isEmpty()) {
+            String passwordCodificada = passwordEncoder.encode(usuario.getPassword());
+            usuario.setPassword(passwordCodificada);
+        }
         return usuarioRepository.save(usuario);
     }
 
@@ -40,16 +49,21 @@ public class UsuarioServiceImpl implements UsuarioService {
         usuarioRepository.deleteById(id);
     }
 
-    // ========== NUEVO METODO IMPLEMENTADO ==========
     @Override
-    public boolean validarDatosCompletos(Usuario usuario) {
-        if (usuario == null) return false;
-        if (usuario.getUsername() == null || usuario.getUsername().isEmpty()) return false;
-        if (usuario.getPassword() == null || usuario.getPassword().isEmpty()) return false;
-        if (usuario.getEmail() == null || usuario.getEmail().isEmpty()) return false;
-        if (usuario.getNombre() == null || usuario.getNombre().isEmpty()) return false;
-        if (usuario.getApellido() == null || usuario.getApellido().isEmpty()) return false;
-        if (usuario.getDireccion() == null || usuario.getDireccion().isEmpty()) return false;
-        return true;
+    public Usuario update(Long id, Usuario usuarioActualizado) {
+        Optional<Usuario> usuarioOptional = usuarioRepository.findById(id);
+        if (usuarioOptional.isPresent()) {
+            Usuario usuario = usuarioOptional.get();
+            if (usuarioActualizado.getUsername() != null && !usuarioActualizado.getUsername().isEmpty()) {
+                usuario.setUsername(usuarioActualizado.getUsername());
+            }
+            if (usuarioActualizado.getPassword() != null && !usuarioActualizado.getPassword().isEmpty()) {
+                // También codificar la nueva contraseña si se actualiza
+                String passwordCodificada = passwordEncoder.encode(usuarioActualizado.getPassword());
+                usuario.setPassword(passwordCodificada);
+            }
+            return usuarioRepository.save(usuario);
+        }
+        return null;
     }
 }
