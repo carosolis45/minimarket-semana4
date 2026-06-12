@@ -9,10 +9,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -21,84 +23,86 @@ class UsuarioServiceTest {
     @Mock
     private UsuarioRepository usuarioRepository;
 
-    @InjectMocks
-    private UsuarioServiceImpl usuarioService;  // ← usamos la implementación
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
-    private Usuario usuarioCompleto;
-    private Usuario usuarioSinEmail;
-    private Usuario usuarioSinDireccion;
+    @InjectMocks
+    private UsuarioServiceImpl usuarioService;
+
+    private Usuario usuarioExistente;
+    private Usuario usuarioNuevo;
 
     @BeforeEach
     void setUp() {
-        // Usuario con datos COMPLETOS (válido)
-        usuarioCompleto = new Usuario();
-        usuarioCompleto.setId(1L);
-        usuarioCompleto.setUsername("cliente1");
-        usuarioCompleto.setPassword("123456");
-        usuarioCompleto.setEmail("cliente@minimarket.cl");
-        usuarioCompleto.setNombre("Juan");
-        usuarioCompleto.setApellido("Perez");
-        usuarioCompleto.setDireccion("Av. Siempre Viva 123");
+        usuarioExistente = new Usuario();
+        usuarioExistente.setId(1L);
+        usuarioExistente.setUsername("juanito");
+        usuarioExistente.setPassword("password123");
 
-        // Usuario sin email (inválido)
-        usuarioSinEmail = new Usuario();
-        usuarioSinEmail.setUsername("cliente2");
-        usuarioSinEmail.setPassword("123456");
-        usuarioSinEmail.setNombre("Pedro");
-        usuarioSinEmail.setApellido("Gomez");
-        usuarioSinEmail.setDireccion("Calle Falsa 123");
-        // falta email
-
-        // Usuario sin dirección (inválido)
-        usuarioSinDireccion = new Usuario();
-        usuarioSinDireccion.setUsername("cliente3");
-        usuarioSinDireccion.setPassword("123456");
-        usuarioSinDireccion.setEmail("cliente3@mail.com");
-        usuarioSinDireccion.setNombre("Maria");
-        usuarioSinDireccion.setApellido("Lopez");
-        // falta direccion
-    }
-
-    // ========== PRUEBA DE DISPONIBILIDAD (DATOS COMPLETOS) ==========
-
-    @Test
-    void testValidarDatosCompletos_UsuarioValido_RetornaTrue() {
-        boolean esValido = usuarioService.validarDatosCompletos(usuarioCompleto);
-        assertTrue(esValido);
+        usuarioNuevo = new Usuario();
+        usuarioNuevo.setUsername("pedrito");
+        usuarioNuevo.setPassword("123456");
     }
 
     @Test
-    void testValidarDatosCompletos_UsuarioSinEmail_RetornaFalse() {
-        boolean esValido = usuarioService.validarDatosCompletos(usuarioSinEmail);
-        assertFalse(esValido);
+    void testFindByUsername_UsuarioExistente() {
+        when(usuarioRepository.findByUsername("juanito")).thenReturn(Optional.of(usuarioExistente));
+
+        Optional<Usuario> resultado = usuarioService.findByUsername("juanito");
+
+        assertTrue(resultado.isPresent());
+        assertEquals("juanito", resultado.get().getUsername());
+        verify(usuarioRepository, times(1)).findByUsername("juanito");
     }
 
     @Test
-    void testValidarDatosCompletos_UsuarioSinDireccion_RetornaFalse() {
-        boolean esValido = usuarioService.validarDatosCompletos(usuarioSinDireccion);
-        assertFalse(esValido);
+    void testFindByUsername_UsuarioNoExistente() {
+        when(usuarioRepository.findByUsername("inexistente")).thenReturn(Optional.empty());
+
+        Optional<Usuario> resultado = usuarioService.findByUsername("inexistente");
+
+        assertFalse(resultado.isPresent());
+        verify(usuarioRepository, times(1)).findByUsername("inexistente");
     }
 
-    // ========== PRUEBAS EXISTENTES (findById) ==========
-
     @Test
-    void testFindById_UsuarioExistente() {
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuarioCompleto));
+    void testAddUsuario_CodificaPasswordYGuarda() {
+        String passwordPlano = "123456";
+        String passwordCodificada = "$2a$10$codificada123";
         
-        Optional<Usuario> encontrado = usuarioService.findById(1L);
+        when(passwordEncoder.encode(passwordPlano)).thenReturn(passwordCodificada);
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> {
+            Usuario u = invocation.getArgument(0);
+            u.setId(2L);
+            return u;
+        });
+
+        Usuario resultado = usuarioService.save(usuarioNuevo);
+
+        assertNotNull(resultado);
+        assertNotNull(resultado.getId());
+        assertEquals("pedrito", resultado.getUsername());
+        assertEquals(passwordCodificada, resultado.getPassword());
         
-        assertTrue(encontrado.isPresent());
-        assertEquals("cliente1", encontrado.get().getUsername());
+        verify(passwordEncoder, times(1)).encode(passwordPlano);
+        verify(usuarioRepository, times(1)).save(any(Usuario.class));
+    }
+
+    @Test
+    void testUpdateUsuario_ConservaPasswordSiNoCambia() {
+        Usuario usuarioActualizado = new Usuario();
+        usuarioActualizado.setId(1L);
+        usuarioActualizado.setUsername("juanito_modificado");
+
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuarioExistente));
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Usuario resultado = usuarioService.update(1L, usuarioActualizado);
+
+        assertNotNull(resultado);
+        assertEquals("juanito_modificado", resultado.getUsername());
+        assertEquals("password123", resultado.getPassword());
         verify(usuarioRepository, times(1)).findById(1L);
-    }
-
-    @Test
-    void testFindById_UsuarioNoExistente() {
-        when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());
-        
-        Optional<Usuario> encontrado = usuarioService.findById(99L);
-        
-        assertFalse(encontrado.isPresent());
-        verify(usuarioRepository, times(1)).findById(99L);
+        verify(usuarioRepository, times(1)).save(any(Usuario.class));
     }
 }
